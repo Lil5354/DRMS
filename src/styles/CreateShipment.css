@@ -1,0 +1,23 @@
+.create-shipment-page {
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+.shipment-form {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.shipment-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .shipment-form .form-row {
+    grid-template-columns: 1fr;
+  }
+}

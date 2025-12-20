@@ -1,0 +1,78 @@
+.pod-page {
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+.pod-form {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.photo-upload {
+  margin-top: 8px;
+}
+
+.upload-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.upload-label:hover {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.upload-label svg {
+  color: #999;
+}
+
+.upload-label span {
+  color: #666;
+  font-size: 14px;
+}
+
+.upload-label input {
+  display: none;
+}
+
+.photo-preview {
+  position: relative;
+}
+
+.photo-preview img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.photo-preview button {
+  width: 100%;
+  padding: 10px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+
+.btn-success:hover {
+  background: #059669;
+}
