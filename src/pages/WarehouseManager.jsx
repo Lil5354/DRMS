@@ -16,6 +16,8 @@ import { FilterDialog } from '../components/ui/filter-dialog'
 import { donations as mockDonations, warehouses } from '../data/drms-mock'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 import { useToast } from '../components/ui/toast'
+import QRScannerInline from '../components/QRScannerInline'
+import '../styles/QRScanner.css'
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend)
@@ -44,6 +46,7 @@ function WarehouseManager() {
     donorPhone: '',
     items: [{ name: '', quantity: '', unit: 'kg' }]
   })
+  const [qrSearchId, setQrSearchId] = useState('')
 
   // Load donations from localStorage and merge with mock data
   const [donations, setDonations] = useState(() => {
@@ -717,15 +720,26 @@ function WarehouseManager() {
                 <CardDescription>Quét mã QR trên phiếu gửi hàng để nhập kho nhanh</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-                  <div className="text-center">
-                    <QrCode className="w-24 h-24 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 mb-4">Đưa mã QR vào khung hình</p>
-                    <Button>
-                      <Scan className="w-4 h-4" />
-                      Bật camera
-                    </Button>
-                  </div>
+                <div className="aspect-square bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden">
+                  <QRScannerInline 
+                    onScan={(decodedText) => {
+                      console.log('QR scanned:', decodedText)
+                      setQrSearchId(decodedText)
+                      
+                      // Search for donation with this tracking code
+                      const donation = warehouseDonations.find(d => d.trackingCode === decodedText)
+                      if (donation) {
+                        setSelectedDonation(donation)
+                        setShowDonationDialog(true)
+                        toast.success('Tìm thấy lô hàng: ' + decodedText)
+                      } else {
+                        toast.error('Không tìm thấy lô hàng với mã: ' + decodedText)
+                      }
+                    }}
+                    onError={(error) => {
+                      toast.error(error)
+                    }}
+                  />
                 </div>
                 
                 <div className="text-center">
@@ -733,10 +747,39 @@ function WarehouseManager() {
                   <div className="flex gap-2">
                     <input 
                       type="text" 
+                      value={qrSearchId}
+                      onChange={(e) => setQrSearchId(e.target.value)}
                       placeholder="Nhập mã tracking (VD: TRK001234)"
                       className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          const donation = warehouseDonations.find(d => d.trackingCode === qrSearchId)
+                          if (donation) {
+                            setSelectedDonation(donation)
+                            setShowDonationDialog(true)
+                            toast.success('Tìm thấy lô hàng: ' + qrSearchId)
+                          } else {
+                            toast.error('Không tìm thấy lô hàng với mã: ' + qrSearchId)
+                          }
+                        }
+                      }}
                     />
-                    <Button>
+                    <Button
+                      onClick={() => {
+                        if (!qrSearchId.trim()) {
+                          toast.error('Vui lòng nhập mã tracking')
+                          return
+                        }
+                        const donation = warehouseDonations.find(d => d.trackingCode === qrSearchId)
+                        if (donation) {
+                          setSelectedDonation(donation)
+                          setShowDonationDialog(true)
+                          toast.success('Tìm thấy lô hàng: ' + qrSearchId)
+                        } else {
+                          toast.error('Không tìm thấy lô hàng với mã: ' + qrSearchId)
+                        }
+                      }}
+                    >
                       <Search className="w-4 h-4" />
                       Tìm
                     </Button>
