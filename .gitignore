@@ -42,7 +42,11 @@ Thumbs.db
 .dotnet/
 
 # Local env files
+.env
 .env*.local
+.env.development
+.env.production
+.env.test
 
 # Vercel
 .vercel

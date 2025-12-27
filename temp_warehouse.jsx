@@ -13,11 +13,12 @@ import { Badge } from '../components/ui/badge'
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogContent, DialogFooter } from '../components/ui/dialog'
 import { ConfirmDialog } from '../components/ui/confirm-dialog'
 import { FilterDialog } from '../components/ui/filter-dialog'
-import { donations as mockDonations, warehouses } from '../data/drms-mock'
+import { donations, warehouses } from '../data/drms-mock'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
 import { useToast } from '../components/ui/toast'
-import QRCodeDisplay from '../components/QRCodeDisplay'
+import QRScanner from '../components/QRScanner'
 import QRScannerInline from '../components/QRScannerInline'
+import '../styles/QRScanner.css'
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend)
@@ -26,7 +27,7 @@ function WarehouseManager() {
   const navigate = useNavigate()
   const toast = useToast()
   const [activeTab, setActiveTab] = useState('overview')
-  const [selectedWarehouse] = useState(warehouses[0]) // Mock: manager quản lý kho đầu tiên
+  const [selectedWarehouse] = useState(warehouses[0]) // Mock: manager quáº£n lĂ½ kho Ä‘áº§u tiĂªn
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [selectedDonation, setSelectedDonation] = useState(null)
   const [showDonationDialog, setShowDonationDialog] = useState(false)
@@ -46,82 +47,7 @@ function WarehouseManager() {
     donorPhone: '',
     items: [{ name: '', quantity: '', unit: 'kg' }]
   })
-  const [manualTrackingInput, setManualTrackingInput] = useState('')
-
-  // Load donations from localStorage and merge with mock data
-  const [donations, setDonations] = useState(() => {
-    const savedDonations = JSON.parse(localStorage.getItem('donations') || '[]')
-    // Merge with mock data, avoiding duplicates by id
-    const allDonations = [...mockDonations]
-    savedDonations.forEach(saved => {
-      if (!allDonations.find(d => d.id === saved.id)) {
-        allDonations.push(saved)
-      }
-    })
-    return allDonations
-  })
-
-  // Function to update donation status
-  const updateDonationStatus = (donationId, newStatus) => {
-    const updatedDonations = donations.map(d => {
-      if (d.id === donationId) {
-        const updated = { ...d, status: newStatus }
-        if (newStatus === 'RECEIVED' && !d.receivedAt) {
-          updated.receivedAt = '2026-01-01T' + new Date().toTimeString().slice(0, 8)
-        }
-        if (newStatus === 'DISTRIBUTED' && !d.distributedAt) {
-          updated.distributedAt = '2026-01-01T' + new Date().toTimeString().slice(0, 8)
-        }
-        return updated
-      }
-      return d
-    })
-    setDonations(updatedDonations)
-    
-    // Update localStorage
-    const savedDonations = JSON.parse(localStorage.getItem('donations') || '[]')
-    const updatedSaved = savedDonations.map(d => {
-      if (d.id === donationId) {
-        const updated = { ...d, status: newStatus }
-        if (newStatus === 'RECEIVED' && !d.receivedAt) {
-          updated.receivedAt = '2026-01-01T' + new Date().toTimeString().slice(0, 8)
-        }
-        if (newStatus === 'DISTRIBUTED' && !d.distributedAt) {
-          updated.distributedAt = '2026-01-01T' + new Date().toTimeString().slice(0, 8)
-        }
-        return updated
-      }
-      return d
-    })
-    localStorage.setItem('donations', JSON.stringify(updatedSaved))
-  }
-
-  // Refresh donations when localStorage changes (for cross-tab updates)
-  React.useEffect(() => {
-    const handleStorageChange = () => {
-      const savedDonations = JSON.parse(localStorage.getItem('donations') || '[]')
-      const allDonations = [...mockDonations]
-      savedDonations.forEach(saved => {
-        if (!allDonations.find(d => d.id === saved.id)) {
-          allDonations.push(saved)
-        } else {
-          // Update existing donation
-          const index = allDonations.findIndex(d => d.id === saved.id)
-          allDonations[index] = saved
-        }
-      })
-      setDonations(allDonations)
-    }
-
-    window.addEventListener('storage', handleStorageChange)
-    // Also check on focus
-    window.addEventListener('focus', handleStorageChange)
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange)
-      window.removeEventListener('focus', handleStorageChange)
-    }
-  }, [])
+  const [qrSearchId, setQrSearchId] = useState('')
   
   const barChartRef = React.useRef(null)
   const lineChartRef = React.useRef(null)
@@ -234,7 +160,7 @@ function WarehouseManager() {
 
   const stats = [
     {
-      title: 'Hàng chờ nhận',
+      title: 'HĂ ng chá» nháº­n',
       value: warehouseDonations.filter(d => d.status === 'REGISTERED').length,
       icon: Clock,
       color: 'text-amber-600',
@@ -242,7 +168,7 @@ function WarehouseManager() {
       trend: '+3'
     },
     {
-      title: 'Đã nhập kho',
+      title: 'ÄĂ£ nháº­p kho',
       value: warehouseDonations.filter(d => d.status === 'RECEIVED').length,
       icon: CheckCircle,
       color: 'text-green-600',
@@ -250,7 +176,7 @@ function WarehouseManager() {
       trend: '+12'
     },
     {
-      title: 'Đã phát',
+      title: 'ÄĂ£ phĂ¡t',
       value: warehouseDonations.filter(d => d.status === 'DISTRIBUTED').length,
       icon: TrendingUp,
       color: 'text-blue-600',
@@ -258,7 +184,7 @@ function WarehouseManager() {
       trend: '+8'
     },
     {
-      title: 'Sức chứa',
+      title: 'Sá»©c chá»©a',
       value: `${selectedWarehouse.currentLoad}/${selectedWarehouse.capacity}`,
       icon: Package,
       color: 'text-purple-600',
@@ -278,14 +204,14 @@ function WarehouseManager() {
             <div className="flex items-center gap-3">
               <Package className="w-10 h-10 text-blue-500 hover:scale-110 transition-transform duration-300" strokeWidth={1.5} />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Quản lý kho</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Quáº£n lĂ½ kho</h1>
                 <p className="text-sm text-gray-500">{selectedWarehouse.name}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Button variant="outline" size="sm" className="hover:scale-105 transition-all duration-300">
                 <Download className="w-4 h-4" strokeWidth={1.5} />
-                Xuất báo cáo
+                Xuáº¥t bĂ¡o cĂ¡o
               </Button>
               <div 
                 className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors duration-300 cursor-pointer"
@@ -299,14 +225,14 @@ function WarehouseManager() {
                 size="sm"
                 className="hover:scale-105 transition-all duration-300"
                 onClick={() => {
-                  toast.success('Đăng xuất thành công!')
+                  toast.success('ÄÄƒng xuáº¥t thĂ nh cĂ´ng!')
                   setTimeout(() => {
                     localStorage.removeItem('user')
                     window.location.href = '/login'
                   }, 1000)
                 }}
               >
-                Đăng xuất
+                ÄÄƒng xuáº¥t
               </Button>
             </div>
           </div>
@@ -318,21 +244,21 @@ function WarehouseManager() {
         <div className="container mx-auto px-6 py-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
-              <p className="text-blue-100 text-sm mb-1">Địa chỉ</p>
+              <p className="text-blue-100 text-sm mb-1">Äá»‹a chá»‰</p>
               <p className="font-semibold">{selectedWarehouse.address}</p>
             </div>
             <div>
-              <p className="text-blue-100 text-sm mb-1">Giờ mở cửa</p>
+              <p className="text-blue-100 text-sm mb-1">Giá» má»Ÿ cá»­a</p>
               <p className="font-semibold">{selectedWarehouse.openHours}</p>
             </div>
             <div>
-              <p className="text-blue-100 text-sm mb-1">Liên hệ</p>
+              <p className="text-blue-100 text-sm mb-1">LiĂªn há»‡</p>
               <p className="font-semibold">{selectedWarehouse.phone}</p>
             </div>
             <div>
-              <p className="text-blue-100 text-sm mb-1">Trạng thái</p>
+              <p className="text-blue-100 text-sm mb-1">Tráº¡ng thĂ¡i</p>
               <Badge className="bg-white text-blue-600 hover:bg-white">
-                {selectedWarehouse.status === 'OPEN' ? 'Đang hoạt động' : 'Đã đầy'}
+                {selectedWarehouse.status === 'OPEN' ? 'Äang hoáº¡t Ä‘á»™ng' : 'ÄĂ£ Ä‘áº§y'}
               </Badge>
             </div>
           </div>
@@ -344,11 +270,11 @@ function WarehouseManager() {
         <div className="container mx-auto px-6">
           <div className="flex gap-6">
             {[
-              { id: 'overview', label: 'Tổng quan', icon: TrendingUp },
-              { id: 'inbound', label: 'Nhập kho', icon: Upload },
-              { id: 'inventory', label: 'Tồn kho', icon: Package },
-              { id: 'outbound', label: 'Xuất kho', icon: TrendingDown },
-              { id: 'qr-scan', label: 'Quét QR', icon: QrCode }
+              { id: 'overview', label: 'Tá»•ng quan', icon: TrendingUp },
+              { id: 'inbound', label: 'Nháº­p kho', icon: Upload },
+              { id: 'inventory', label: 'Tá»“n kho', icon: Package },
+              { id: 'outbound', label: 'Xuáº¥t kho', icon: TrendingDown },
+              { id: 'qr-scan', label: 'QuĂ©t QR', icon: QrCode }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -381,7 +307,7 @@ function WarehouseManager() {
                       <div className="flex-1">
                         <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
                         <h3 className="text-3xl font-bold text-gray-900 mb-2">{stat.value}</h3>
-                        <p className="text-xs text-green-600 font-semibold">↑ {stat.trend} hôm nay</p>
+                        <p className="text-xs text-green-600 font-semibold">â†‘ {stat.trend} hĂ´m nay</p>
                       </div>
                       <stat.icon className={`w-12 h-12 ${stat.color} group-hover:scale-110 transition-transform duration-300`} strokeWidth={1.5} />
                     </div>
@@ -397,9 +323,9 @@ function WarehouseManager() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <BarChart3 className="w-5 h-5" />
-                    Xu hướng nhập kho
+                    Xu hÆ°á»›ng nháº­p kho
                   </CardTitle>
-                  <CardDescription>7 ngày gần đây</CardDescription>
+                  <CardDescription>7 ngĂ y gáº§n Ä‘Ă¢y</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {chartsVisible.bar && (
@@ -408,7 +334,7 @@ function WarehouseManager() {
                         labels: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
                         datasets: [
                           {
-                            label: 'Lô hàng nhập',
+                            label: 'LĂ´ hĂ ng nháº­p',
                             data: [8, 12, 10, 15, 18, 14, 16],
                             backgroundColor: 'rgba(59, 130, 246, 0.8)',
                             borderColor: 'rgba(59, 130, 246, 1)',
@@ -471,14 +397,14 @@ function WarehouseManager() {
               {/* Capacity Progress */}
               <Card className="scroll-fade-right" ref={progressRef} data-chart="progress">
                 <CardHeader>
-                  <CardTitle>Sức chứa kho</CardTitle>
-                  <CardDescription>Tình trạng sử dụng không gian</CardDescription>
+                  <CardTitle>Sá»©c chá»©a kho</CardTitle>
+                  <CardDescription>TĂ¬nh tráº¡ng sá»­ dá»¥ng khĂ´ng gian</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600">Đã sử dụng</span>
-                      <span className="font-semibold">{selectedWarehouse.currentLoad} / {selectedWarehouse.capacity} đơn vị</span>
+                      <span className="text-gray-600">ÄĂ£ sá»­ dá»¥ng</span>
+                      <span className="font-semibold">{selectedWarehouse.currentLoad} / {selectedWarehouse.capacity} Ä‘Æ¡n vá»‹</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-4">
                       <div 
@@ -502,15 +428,15 @@ function WarehouseManager() {
                     <div className="grid grid-cols-3 gap-4 pt-4 border-t">
                       <div className="text-center">
                         <p className="text-2xl font-bold text-green-600">{warehouseDonations.filter(d => d.status === 'RECEIVED').length}</p>
-                        <p className="text-xs text-gray-600 mt-1">Đã nhận</p>
+                        <p className="text-xs text-gray-600 mt-1">ÄĂ£ nháº­n</p>
                       </div>
                       <div className="text-center">
                         <p className="text-2xl font-bold text-amber-600">{warehouseDonations.filter(d => d.status === 'REGISTERED').length}</p>
-                        <p className="text-xs text-gray-600 mt-1">Chờ nhận</p>
+                        <p className="text-xs text-gray-600 mt-1">Chá» nháº­n</p>
                       </div>
                       <div className="text-center">
                         <p className="text-2xl font-bold text-blue-600">{warehouseDonations.filter(d => d.status === 'DISTRIBUTED').length}</p>
-                        <p className="text-xs text-gray-600 mt-1">Đã phát</p>
+                        <p className="text-xs text-gray-600 mt-1">ÄĂ£ phĂ¡t</p>
                       </div>
                     </div>
                   </div>
@@ -522,9 +448,9 @@ function WarehouseManager() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <TrendingUp className="w-5 h-5" />
-                    Hoạt động kho theo thời gian
+                    Hoáº¡t Ä‘á»™ng kho theo thá»i gian
                   </CardTitle>
-                  <CardDescription>30 ngày gần đây</CardDescription>
+                  <CardDescription>30 ngĂ y gáº§n Ä‘Ă¢y</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {chartsVisible.line && (
@@ -533,7 +459,7 @@ function WarehouseManager() {
                         labels: ['1/12', '5/12', '10/12', '15/12', '20/12', '25/12', '30/12'],
                         datasets: [
                           {
-                            label: 'Nhập kho',
+                            label: 'Nháº­p kho',
                             data: [25, 32, 28, 45, 50, 55, 60],
                             borderColor: 'rgba(34, 197, 94, 1)',
                             backgroundColor: 'rgba(34, 197, 94, 0.1)',
@@ -546,7 +472,7 @@ function WarehouseManager() {
                             pointBorderWidth: 2,
                           },
                           {
-                            label: 'Xuất kho',
+                            label: 'Xuáº¥t kho',
                             data: [18, 22, 20, 35, 38, 42, 48],
                             borderColor: 'rgba(239, 68, 68, 1)',
                             backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -631,10 +557,10 @@ function WarehouseManager() {
             <Card className="scroll-scale">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Lô hàng gần đây</CardTitle>
+                  <CardTitle>LĂ´ hĂ ng gáº§n Ä‘Ă¢y</CardTitle>
                   <Button variant="outline" size="sm">
                     <Filter className="w-4 h-4" />
-                    Lọc
+                    Lá»c
                   </Button>
                 </div>
               </CardHeader>
@@ -664,9 +590,9 @@ function WarehouseManager() {
                               'bg-blue-500 text-white'
                             }
                           >
-                            {donation.status === 'REGISTERED' ? 'Chờ nhận' :
-                             donation.status === 'RECEIVED' ? 'Đã nhận' :
-                             'Đã phát'}
+                            {donation.status === 'REGISTERED' ? 'Chá» nháº­n' :
+                             donation.status === 'RECEIVED' ? 'ÄĂ£ nháº­n' :
+                             'ÄĂ£ phĂ¡t'}
                           </Badge>
                         </div>
                         <div className="flex flex-wrap gap-2 mb-2">
@@ -694,14 +620,13 @@ function WarehouseManager() {
                       {donation.status === 'REGISTERED' && (
                         <Button 
                           size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            updateDonationStatus(donation.id, 'RECEIVED')
-                            toast.success('Đã xác nhận nhận hàng thành công!')
+                          onClick={() => {
+                            toast.success('ÄĂ£ xĂ¡c nháº­n nháº­n hĂ ng thĂ nh cĂ´ng!')
+                            // Mock update status - In real app, call API here
                           }}
                         >
                           <CheckCircle className="w-4 h-4" />
-                          Xác nhận nhận
+                          XĂ¡c nháº­n nháº­n
                         </Button>
                       )}
                     </div>
@@ -716,8 +641,8 @@ function WarehouseManager() {
           <div className="max-w-2xl mx-auto">
             <Card className="scroll-scale">
               <CardHeader className="text-center">
-                <CardTitle className="text-2xl">Quét mã QR</CardTitle>
-                <CardDescription>Quét mã QR trên phiếu gửi hàng để nhập kho nhanh</CardDescription>
+                <CardTitle className="text-2xl">QuĂ©t mĂ£ QR</CardTitle>
+                <CardDescription>QuĂ©t mĂ£ QR trĂªn phiáº¿u gá»­i hĂ ng Ä‘á»ƒ nháº­p kho nhanh</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div 
@@ -735,80 +660,50 @@ function WarehouseManager() {
                 >
                   <QRScannerInline 
                     onScan={(decodedText) => {
-                      console.log('QR Code đã được quét:', decodedText)
+                      console.log('QR scanned:', decodedText)
+                      setQrSearchId(decodedText)
                       
-                      // Validate và trim mã QR
-                      const trackingCode = decodedText.trim()
-                      
-                      // Kiểm tra mã có hợp lệ không (ít nhất 3 ký tự)
-                      if (!trackingCode || trackingCode.length < 3) {
-                        toast.error('Mã QR không hợp lệ. Vui lòng thử lại.')
-                        console.warn('Mã QR quét được quá ngắn:', trackingCode)
-                        return
-                      }
-                      
-                      // Tìm donation với mã tracking này
-                      const donation = donations.find(d => 
-                        d.trackingCode && d.trackingCode.trim().toUpperCase() === trackingCode.toUpperCase()
-                      )
-                      
+                      // Search for donation with this tracking code
+                      const donation = warehouseDonations.find(d => d.trackingCode === decodedText)
                       if (donation) {
-                        // Tìm thấy - hiển thị dialog và cập nhật thông tin
                         setSelectedDonation(donation)
                         setShowDonationDialog(true)
-                        toast.success(`✓ Tìm thấy lô hàng: ${trackingCode}`)
-                        console.log('Đã tìm thấy donation:', donation)
+                        toast.success('TĂ¬m tháº¥y lĂ´ hĂ ng: ' + decodedText)
                       } else {
-                        // Không tìm thấy - hiển thị thông báo
-                        toast.error(`Không tìm thấy lô hàng với mã: ${trackingCode}`)
-                        console.warn('Không tìm thấy donation với tracking code:', trackingCode)
+                        toast.error('KhĂ´ng tĂ¬m tháº¥y mĂ£ tracking: ' + decodedText)
                       }
                     }}
                     onError={(error) => {
-                      console.error('Lỗi quét QR:', error)
-                      toast.error(typeof error === 'string' ? error : 'Đã xảy ra lỗi khi quét QR. Vui lòng thử lại.')
+                      toast.error(error)
                     }}
                   />
                 </div>
                 
                 <div className="text-center">
-                  <p className="text-sm text-gray-500 mb-4">Hoặc nhập mã thủ công</p>
+                  <p className="text-sm text-gray-500 mb-4">Hoáº·c nháº­p mĂ£ thá»§ cĂ´ng</p>
                   <div className="flex gap-2">
                     <input 
                       type="text" 
-                      value={manualTrackingInput}
-                      onChange={(e) => setManualTrackingInput(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          const donation = donations.find(d => d.trackingCode === manualTrackingInput.trim())
-                          if (donation) {
-                            setSelectedDonation(donation)
-                            setShowDonationDialog(true)
-                            toast.success('Tìm thấy lô hàng: ' + manualTrackingInput)
-                            setManualTrackingInput('')
-                          } else {
-                            toast.error('Không tìm thấy mã tracking: ' + manualTrackingInput)
-                          }
-                        }
-                      }}
-                      placeholder="Nhập mã tracking (VD: TRK001234)"
+                      value={qrSearchId}
+                      onChange={(e) => setQrSearchId(e.target.value)}
+                      placeholder="Nháº­p mĂ£ tracking (VD: TRK001234)"
                       className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ transition: 'all 0.2s ease' }}
                     />
-                    <Button
-                      onClick={() => {
-                        const donation = donations.find(d => d.trackingCode === manualTrackingInput.trim())
+                    <Button onClick={() => {
+                      if (qrSearchId.trim()) {
+                        const donation = warehouseDonations.find(d => d.trackingCode === qrSearchId)
                         if (donation) {
                           setSelectedDonation(donation)
                           setShowDonationDialog(true)
-                          toast.success('Tìm thấy lô hàng: ' + manualTrackingInput)
-                          setManualTrackingInput('')
+                          toast.success('TĂ¬m tháº¥y lĂ´ hĂ ng!')
                         } else {
-                          toast.error('Không tìm thấy mã tracking: ' + manualTrackingInput)
+                          toast.error('KhĂ´ng tĂ¬m tháº¥y mĂ£ tracking nĂ y')
                         }
-                      }}
-                    >
+                      }
+                    }}>
                       <Search className="w-4 h-4" />
-                      Tìm
+                      TĂ¬m
                     </Button>
                   </div>
                 </div>
@@ -816,20 +711,20 @@ function WarehouseManager() {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
                     <AlertCircle className="w-5 h-5" />
-                    Hướng dẫn
+                    HÆ°á»›ng dáº«n
                   </h4>
                   <ul className="text-sm text-blue-800 space-y-1">
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-600 mt-0.5">•</span>
-                      <span>Yêu cầu người quyên góp xuất trình mã QR trên điện thoại</span>
+                      <span className="text-blue-600 mt-0.5">â€¢</span>
+                      <span>YĂªu cáº§u ngÆ°á»i quyĂªn gĂ³p xuáº¥t trĂ¬nh mĂ£ QR trĂªn Ä‘iá»‡n thoáº¡i</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-600 mt-0.5">•</span>
-                      <span>Quét mã để tự động điền thông tin lô hàng</span>
+                      <span className="text-blue-600 mt-0.5">â€¢</span>
+                      <span>QuĂ©t mĂ£ Ä‘á»ƒ tá»± Ä‘á»™ng Ä‘iá»n thĂ´ng tin lĂ´ hĂ ng</span>
                     </li>
                     <li className="flex items-start gap-2">
-                      <span className="text-blue-600 mt-0.5">•</span>
-                      <span>Kiểm tra và xác nhận nhập kho</span>
+                      <span className="text-blue-600 mt-0.5">â€¢</span>
+                      <span>Kiá»ƒm tra vĂ  xĂ¡c nháº­n nháº­p kho</span>
                     </li>
                   </ul>
                 </div>
@@ -841,18 +736,18 @@ function WarehouseManager() {
         {activeTab === 'inbound' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Danh sách chờ nhập kho</h2>
+              <h2 className="text-2xl font-bold">Danh sĂ¡ch chá» nháº­p kho</h2>
               <div className="flex gap-2">
                 <Button 
                   variant="outline"
                   onClick={() => setShowFilterDialog(true)}
                 >
                   <Filter className="w-4 h-4" />
-                  Lọc {Object.values(donationFilters).filter(v => v && v !== 'ALL').length > 0 && `(${Object.values(donationFilters).filter(v => v && v !== 'ALL').length})`}
+                  Lá»c {Object.values(donationFilters).filter(v => v && v !== 'ALL').length > 0 && `(${Object.values(donationFilters).filter(v => v && v !== 'ALL').length})`}
                 </Button>
                 <Button onClick={() => setShowAddDialog(true)}>
                   <Plus className="w-4 h-4" />
-                  Thêm thủ công
+                  ThĂªm thá»§ cĂ´ng
                 </Button>
               </div>
             </div>
@@ -861,8 +756,8 @@ function WarehouseManager() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-600 mb-2">Không có lô hàng chờ nhận</h3>
-                  <p className="text-sm text-gray-500">Tất cả lô hàng đã được xử lý</p>
+                  <h3 className="text-lg font-semibold text-gray-600 mb-2">KhĂ´ng cĂ³ lĂ´ hĂ ng chá» nháº­n</h3>
+                  <p className="text-sm text-gray-500">Táº¥t cáº£ lĂ´ hĂ ng Ä‘Ă£ Ä‘Æ°á»£c xá»­ lĂ½</p>
                 </CardContent>
               </Card>
             ) : (
@@ -890,13 +785,13 @@ function WarehouseManager() {
                                 {donation.donorPhone}
                               </p>
                             </div>
-                            <Badge className="bg-amber-500">Chờ nhận</Badge>
+                            <Badge className="bg-amber-500">Chá» nháº­n</Badge>
                           </div>
                           
                           <div className="mb-4">
                             <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                               <Package className="w-4 h-4" />
-                              Danh sách vật phẩm:
+                              Danh sĂ¡ch váº­t pháº©m:
                             </p>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                               {donation.items.map((item, idx) => (
@@ -914,35 +809,20 @@ function WarehouseManager() {
                                 <Package className="w-3 h-3" />
                                 {donation.trackingCode}
                               </span>
-                              <span>•</span>
+                              <span>â€¢</span>
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
                                 {new Date(donation.registeredAt).toLocaleString('vi-VN')}
                               </span>
                             </div>
                             <div className="flex gap-2">
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setSelectedDonation(donation)
-                                  setShowDonationDialog(true)
-                                }}
-                              >
+                              <Button variant="outline" size="sm">
                                 <QrCode className="w-4 h-4" />
-                                Xem QR
+                                QuĂ©t QR
                               </Button>
-                              <Button 
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  updateDonationStatus(donation.id, 'RECEIVED')
-                                  toast.success('Đã xác nhận nhận hàng thành công!')
-                                }}
-                              >
+                              <Button size="sm">
                                 <CheckCircle className="w-4 h-4" />
-                                Xác nhận nhận hàng
+                                XĂ¡c nháº­n nháº­n hĂ ng
                               </Button>
                             </div>
                           </div>
@@ -959,21 +839,21 @@ function WarehouseManager() {
         {activeTab === 'inventory' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Tồn kho hiện tại</h2>
+              <h2 className="text-2xl font-bold">Tá»“n kho hiá»‡n táº¡i</h2>
               <div className="flex gap-2">
                 <Button 
                   variant="outline"
                   onClick={() => setShowFilterDialog(true)}
                 >
                   <Filter className="w-4 h-4" />
-                  Lọc {Object.values(donationFilters).filter(v => v && v !== 'ALL').length > 0 && `(${Object.values(donationFilters).filter(v => v && v !== 'ALL').length})`}
+                  Lá»c {Object.values(donationFilters).filter(v => v && v !== 'ALL').length > 0 && `(${Object.values(donationFilters).filter(v => v && v !== 'ALL').length})`}
                 </Button>
                 <Button 
                   variant="outline"
-                  onClick={() => toast.info('Chức năng xuất Excel đang phát triển')}
+                  onClick={() => toast.info('Chá»©c nÄƒng xuáº¥t Excel Ä‘ang phĂ¡t triá»ƒn')}
                 >
                   <Download className="w-4 h-4" />
-                  Xuất Excel
+                  Xuáº¥t Excel
                 </Button>
               </div>
             </div>
@@ -995,17 +875,17 @@ function WarehouseManager() {
                       </div>
                       <div className="flex-1">
                         <h3 className="font-bold text-gray-900 mb-1">{donation.donorName}</h3>
-                        <Badge className="bg-green-500 mb-3">Đã nhập kho</Badge>
+                        <Badge className="bg-green-500 mb-3">ÄĂ£ nháº­p kho</Badge>
                         
                         <div className="space-y-2">
                           <p className="text-xs text-gray-600">
-                            <strong>Mã:</strong> {donation.trackingCode}
+                            <strong>MĂ£:</strong> {donation.trackingCode}
                           </p>
                           <p className="text-xs text-gray-600">
-                            <strong>Số lượng:</strong> {donation.items.length} loại vật phẩm
+                            <strong>Sá»‘ lÆ°á»£ng:</strong> {donation.items.length} loáº¡i váº­t pháº©m
                           </p>
                           <p className="text-xs text-gray-600">
-                            <strong>Nhập lúc:</strong> {new Date(donation.receivedAt || donation.registeredAt).toLocaleString('vi-VN')}
+                            <strong>Nháº­p lĂºc:</strong> {new Date(donation.receivedAt || donation.registeredAt).toLocaleString('vi-VN')}
                           </p>
                         </div>
                       </div>
@@ -1019,8 +899,8 @@ function WarehouseManager() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-600 mb-2">Kho trống</h3>
-                  <p className="text-sm text-gray-500">Chưa có lô hàng nào trong kho</p>
+                  <h3 className="text-lg font-semibold text-gray-600 mb-2">Kho trá»‘ng</h3>
+                  <p className="text-sm text-gray-500">ChÆ°a cĂ³ lĂ´ hĂ ng nĂ o trong kho</p>
                 </CardContent>
               </Card>
             )}
@@ -1030,21 +910,21 @@ function WarehouseManager() {
         {activeTab === 'outbound' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold">Lịch sử xuất kho</h2>
+              <h2 className="text-2xl font-bold">Lá»‹ch sá»­ xuáº¥t kho</h2>
               <div className="flex gap-2">
                 <Button 
                   variant="outline"
                   onClick={() => setShowFilterDialog(true)}
                 >
                   <Filter className="w-4 h-4" />
-                  Lọc {Object.values(donationFilters).filter(v => v && v !== 'ALL').length > 0 && `(${Object.values(donationFilters).filter(v => v && v !== 'ALL').length})`}
+                  Lá»c {Object.values(donationFilters).filter(v => v && v !== 'ALL').length > 0 && `(${Object.values(donationFilters).filter(v => v && v !== 'ALL').length})`}
                 </Button>
                 <Button 
                   variant="outline"
-                  onClick={() => toast.info('Chức năng xuất báo cáo đang phát triển')}
+                  onClick={() => toast.info('Chá»©c nÄƒng xuáº¥t bĂ¡o cĂ¡o Ä‘ang phĂ¡t triá»ƒn')}
                 >
                   <Download className="w-4 h-4" />
-                  Xuất báo cáo
+                  Xuáº¥t bĂ¡o cĂ¡o
                 </Button>
               </div>
             </div>
@@ -1073,13 +953,13 @@ function WarehouseManager() {
                               {donation.donorPhone}
                             </p>
                           </div>
-                          <Badge className="bg-blue-500">Đã phát</Badge>
+                          <Badge className="bg-blue-500">ÄĂ£ phĂ¡t</Badge>
                         </div>
                         
                         <div className="mb-4">
                           <p className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                             <Package className="w-4 h-4" />
-                            Danh sách vật phẩm:
+                            Danh sĂ¡ch váº­t pháº©m:
                           </p>
                           <div className="flex flex-wrap gap-2">
                             {donation.items.map((item, idx) => (
@@ -1096,11 +976,11 @@ function WarehouseManager() {
                               <Package className="w-3 h-3" />
                               {donation.trackingCode}
                             </span>
-                            <span>•</span>
-                            <span>Xuất lúc: {new Date(donation.distributedAt || donation.registeredAt).toLocaleString('vi-VN')}</span>
+                            <span>â€¢</span>
+                            <span>Xuáº¥t lĂºc: {new Date(donation.distributedAt || donation.registeredAt).toLocaleString('vi-VN')}</span>
                           </div>
                           <Button variant="outline" size="sm">
-                            Xem chi tiết
+                            Xem chi tiáº¿t
                           </Button>
                         </div>
                       </div>
@@ -1114,8 +994,8 @@ function WarehouseManager() {
               <Card>
                 <CardContent className="p-12 text-center">
                   <TrendingDown className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-600 mb-2">Chưa có lịch sử xuất kho</h3>
-                  <p className="text-sm text-gray-500">Chưa có lô hàng nào được phát</p>
+                  <h3 className="text-lg font-semibold text-gray-600 mb-2">ChÆ°a cĂ³ lá»‹ch sá»­ xuáº¥t kho</h3>
+                  <p className="text-sm text-gray-500">ChÆ°a cĂ³ lĂ´ hĂ ng nĂ o Ä‘Æ°á»£c phĂ¡t</p>
                 </CardContent>
               </Card>
             )}
@@ -1134,20 +1014,20 @@ function WarehouseManager() {
           setIsEditingDonation(false)
         }}>
           <DialogTitle>
-            {isEditingDonation ? 'Cập nhật trạng thái' : 'Chi tiết lô hàng'}
+            {isEditingDonation ? 'Cáº­p nháº­t tráº¡ng thĂ¡i' : 'Chi tiáº¿t lĂ´ hĂ ng'}
           </DialogTitle>
-          <DialogDescription>Mã tracking: {selectedDonation?.trackingCode}</DialogDescription>
+          <DialogDescription>MĂ£ tracking: {selectedDonation?.trackingCode}</DialogDescription>
         </DialogHeader>
         <DialogContent>
           {selectedDonation && !isEditingDonation && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-semibold text-gray-600">Người quyên góp</label>
+                  <label className="text-sm font-semibold text-gray-600">NgÆ°á»i quyĂªn gĂ³p</label>
                   <p className="text-sm mt-1">{selectedDonation.donorName}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-semibold text-gray-600">Số điện thoại</label>
+                  <label className="text-sm font-semibold text-gray-600">Sá»‘ Ä‘iá»‡n thoáº¡i</label>
                   <div className="flex items-center gap-2 mt-1">
                     <Phone className="w-4 h-4 text-gray-400" />
                     <p className="text-sm">{selectedDonation.donorPhone}</p>
@@ -1156,7 +1036,7 @@ function WarehouseManager() {
               </div>
               
               <div>
-                <label className="text-sm font-semibold text-gray-600 mb-2 block">Danh sách vật phẩm</label>
+                <label className="text-sm font-semibold text-gray-600 mb-2 block">Danh sĂ¡ch váº­t pháº©m</label>
                 <div className="space-y-2">
                   {selectedDonation.items.map((item, idx) => (
                     <div key={idx} className="flex justify-between p-3 bg-gray-50 rounded-lg">
@@ -1168,29 +1048,19 @@ function WarehouseManager() {
               </div>
               
               <div>
-                <label className="text-sm font-semibold text-gray-600">Trạng thái hiện tại</label>
+                <label className="text-sm font-semibold text-gray-600">Tráº¡ng thĂ¡i hiá»‡n táº¡i</label>
                 <Badge className={`mt-1 ${
                   selectedDonation.status === 'REGISTERED' ? 'bg-amber-500' :
                   selectedDonation.status === 'RECEIVED' ? 'bg-green-500' : 'bg-blue-500'
                 }`}>
-                  {selectedDonation.status === 'REGISTERED' ? 'Chờ nhận' :
-                   selectedDonation.status === 'RECEIVED' ? 'Đã nhận' : 'Đã phát'}
+                  {selectedDonation.status === 'REGISTERED' ? 'Chá» nháº­n' :
+                   selectedDonation.status === 'RECEIVED' ? 'ÄĂ£ nháº­n' : 'ÄĂ£ phĂ¡t'}
                 </Badge>
               </div>
               
               <div>
-                <label className="text-sm font-semibold text-gray-600">Thời gian đăng ký</label>
+                <label className="text-sm font-semibold text-gray-600">Thá»i gian Ä‘Äƒng kĂ½</label>
                 <p className="text-sm mt-1">{new Date(selectedDonation.registeredAt).toLocaleString('vi-VN')}</p>
-              </div>
-              
-              {/* QR Code Display */}
-              <div className="border-t pt-4">
-                <label className="text-sm font-semibold text-gray-600 mb-3 block">Mã QR Tracking</label>
-                <QRCodeDisplay 
-                  trackingId={selectedDonation.trackingCode} 
-                  size={200}
-                  showDownload={true}
-                />
               </div>
             </div>
           )}
@@ -1199,22 +1069,22 @@ function WarehouseManager() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Cập nhật trạng thái
+                  Cáº­p nháº­t tráº¡ng thĂ¡i
                 </label>
                 <select
                   value={donationStatusUpdate}
                   onChange={(e) => setDonationStatusUpdate(e.target.value)}
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="REGISTERED">Chờ nhận</option>
-                  <option value="RECEIVED">Đã nhận</option>
-                  <option value="DISTRIBUTED">Đã phát</option>
+                  <option value="REGISTERED">Chá» nháº­n</option>
+                  <option value="RECEIVED">ÄĂ£ nháº­n</option>
+                  <option value="DISTRIBUTED">ÄĂ£ phĂ¡t</option>
                 </select>
               </div>
               
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
-                  <strong>Lưu ý:</strong> Thay đổi trạng thái sẽ cập nhật hệ thống và thông báo cho người quyên góp.
+                  <strong>LÆ°u Ă½:</strong> Thay Ä‘á»•i tráº¡ng thĂ¡i sáº½ cáº­p nháº­t há»‡ thá»‘ng vĂ  thĂ´ng bĂ¡o cho ngÆ°á»i quyĂªn gĂ³p.
                 </p>
               </div>
             </div>
@@ -1229,30 +1099,27 @@ function WarehouseManager() {
                 onClick={() => setShowDeleteConfirm(true)}
               >
                 <Trash2 className="w-4 h-4 mr-2" />
-                Xóa
+                XĂ³a
               </Button>
-              <Button variant="outline" onClick={() => setShowDonationDialog(false)}>Đóng</Button>
+              <Button variant="outline" onClick={() => setShowDonationDialog(false)}>ÄĂ³ng</Button>
               <Button onClick={() => {
                 setIsEditingDonation(true)
                 setDonationStatusUpdate(selectedDonation?.status || 'REGISTERED')
               }}>
                 <Edit className="w-4 h-4 mr-2" />
-                Cập nhật trạng thái
+                Cáº­p nháº­t tráº¡ng thĂ¡i
               </Button>
             </>
           ) : (
             <>
-              <Button variant="outline" onClick={() => setIsEditingDonation(false)}>Hủy</Button>
+              <Button variant="outline" onClick={() => setIsEditingDonation(false)}>Há»§y</Button>
               <Button onClick={() => {
-                if (selectedDonation) {
-                  updateDonationStatus(selectedDonation.id, donationStatusUpdate)
-                  toast.success('Cập nhật trạng thái thành công!')
-                }
+                toast.success('Cáº­p nháº­t tráº¡ng thĂ¡i thĂ nh cĂ´ng!')
                 setShowDonationDialog(false)
                 setIsEditingDonation(false)
               }}>
                 <Save className="w-4 h-4 mr-2" />
-                Lưu thay đổi
+                LÆ°u thay Ä‘á»•i
               </Button>
             </>
           )}
@@ -1264,25 +1131,15 @@ function WarehouseManager() {
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={() => {
-          if (selectedDonation) {
-            const updatedDonations = donations.filter(d => d.id !== selectedDonation.id)
-            setDonations(updatedDonations)
-            
-            // Remove from localStorage
-            const savedDonations = JSON.parse(localStorage.getItem('donations') || '[]')
-            const updatedSaved = savedDonations.filter(d => d.id !== selectedDonation.id)
-            localStorage.setItem('donations', JSON.stringify(updatedSaved))
-            
-            toast.success('Đã xóa lô hàng thành công!')
-          }
+          toast.success('ÄĂ£ xĂ³a lĂ´ hĂ ng thĂ nh cĂ´ng!')
           setShowDonationDialog(false)
           setSelectedDonation(null)
           setShowDeleteConfirm(false)
         }}
-        title="Xóa lô hàng"
-        description={`Bạn có chắc chắn muốn xóa lô hàng của "${selectedDonation?.donorName}"?`}
-        confirmText="Xóa"
-        cancelText="Hủy"
+        title="XĂ³a lĂ´ hĂ ng"
+        description={`Báº¡n cĂ³ cháº¯c cháº¯n muá»‘n xĂ³a lĂ´ hĂ ng cá»§a "${selectedDonation?.donorName}"?`}
+        confirmText="XĂ³a"
+        cancelText="Há»§y"
         variant="destructive"
       />
 
@@ -1294,42 +1151,42 @@ function WarehouseManager() {
         filters={donationFilters}
         onFilterChange={setDonationFilters}
         onApply={() => {
-          toast.success('Đã áp dụng bộ lọc!')
+          toast.success('ÄĂ£ Ă¡p dá»¥ng bá»™ lá»c!')
         }}
       />
 
       {/* Add Donation Dialog */}
       <Dialog open={showAddDialog} onClose={() => setShowAddDialog(false)}>
         <DialogHeader onClose={() => setShowAddDialog(false)}>
-          <DialogTitle>Thêm lô hàng thủ công</DialogTitle>
-          <DialogDescription>Nhập thông tin lô hàng quyên góp</DialogDescription>
+          <DialogTitle>ThĂªm lĂ´ hĂ ng thá»§ cĂ´ng</DialogTitle>
+          <DialogDescription>Nháº­p thĂ´ng tin lĂ´ hĂ ng quyĂªn gĂ³p</DialogDescription>
         </DialogHeader>
         <DialogContent>
           <form className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Tên người quyên góp *
+                  TĂªn ngÆ°á»i quyĂªn gĂ³p *
                 </label>
                 <input
                   type="text"
                   required
                   value={newDonationForm.donorName}
                   onChange={(e) => setNewDonationForm({ ...newDonationForm, donorName: e.target.value })}
-                  placeholder="Họ và tên người quyên góp"
+                  placeholder="Há» vĂ  tĂªn ngÆ°á»i quyĂªn gĂ³p"
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Số điện thoại *
+                  Sá»‘ Ä‘iá»‡n thoáº¡i *
                 </label>
                 <input
                   type="tel"
                   required
                   value={newDonationForm.donorPhone}
                   onChange={(e) => setNewDonationForm({ ...newDonationForm, donorPhone: e.target.value })}
-                  placeholder="Số điện thoại (10 số)"
+                  placeholder="Sá»‘ Ä‘iá»‡n thoáº¡i (10 sá»‘)"
                   className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -1337,14 +1194,14 @@ function WarehouseManager() {
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Danh sách vật phẩm
+                Danh sĂ¡ch váº­t pháº©m
               </label>
               <div className="space-y-2">
                 {newDonationForm.items.map((item, idx) => (
                   <div key={idx} className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Tên vật phẩm"
+                      placeholder="TĂªn váº­t pháº©m"
                       value={item.name}
                       onChange={(e) => {
                         const newItems = [...newDonationForm.items]
@@ -1355,7 +1212,7 @@ function WarehouseManager() {
                     />
                     <input
                       type="number"
-                      placeholder="Số lượng"
+                      placeholder="Sá»‘ lÆ°á»£ng"
                       value={item.quantity}
                       onChange={(e) => {
                         const newItems = [...newDonationForm.items]
@@ -1374,11 +1231,11 @@ function WarehouseManager() {
                       className="w-24 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       <option value="kg">kg</option>
-                      <option value="thùng">thùng</option>
-                      <option value="gói">gói</option>
-                      <option value="hộp">hộp</option>
-                      <option value="cái">cái</option>
-                      <option value="bộ">bộ</option>
+                      <option value="thĂ¹ng">thĂ¹ng</option>
+                      <option value="gĂ³i">gĂ³i</option>
+                      <option value="há»™p">há»™p</option>
+                      <option value="cĂ¡i">cĂ¡i</option>
+                      <option value="bá»™">bá»™</option>
                     </select>
                     {newDonationForm.items.length > 1 && (
                       <Button
@@ -1409,67 +1266,40 @@ function WarehouseManager() {
                 }}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                Thêm vật phẩm
+                ThĂªm váº­t pháº©m
               </Button>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-800">
-                <strong>Lưu ý:</strong> Lô hàng sẽ được tạo với trạng thái "Chờ nhận" và cần xác nhận nhập kho sau.
+                <strong>LÆ°u Ă½:</strong> LĂ´ hĂ ng sáº½ Ä‘Æ°á»£c táº¡o vá»›i tráº¡ng thĂ¡i "Chá» nháº­n" vĂ  cáº§n xĂ¡c nháº­n nháº­p kho sau.
               </p>
             </div>
           </form>
         </DialogContent>
         <DialogFooter>
           <Button variant="outline" onClick={() => setShowAddDialog(false)}>
-            Hủy
+            Há»§y
           </Button>
-              <Button onClick={() => {
-                if (!newDonationForm.donorName || !newDonationForm.donorPhone) {
-                  toast.error('Vui lòng điền đầy đủ thông tin!')
-                  return
-                }
-                if (newDonationForm.items.some(item => !item.name || !item.quantity)) {
-                  toast.error('Vui lòng điền đầy đủ thông tin vật phẩm!')
-                  return
-                }
-                
-                // Create new donation
-                const trackingCode = 'TRK' + Date.now().toString().slice(-6)
-                const newDonation = {
-                  id: 'don-' + Date.now(),
-                  donorName: newDonationForm.donorName,
-                  donorPhone: newDonationForm.donorPhone,
-                  targetWarehouseId: selectedWarehouse.id,
-                  items: newDonationForm.items.map(item => ({
-                    name: item.name,
-                    quantity: parseInt(item.quantity),
-                    unit: item.unit
-                  })),
-                  status: 'REGISTERED',
-                  registeredAt: '2026-01-01T' + new Date().toTimeString().slice(0, 8),
-                  trackingCode
-                }
-                
-                // Add to donations
-                const updatedDonations = [...donations, newDonation]
-                setDonations(updatedDonations)
-                
-                // Save to localStorage
-                const savedDonations = JSON.parse(localStorage.getItem('donations') || '[]')
-                savedDonations.push(newDonation)
-                localStorage.setItem('donations', JSON.stringify(savedDonations))
-                
-                toast.success('Thêm lô hàng thành công!')
-                setShowAddDialog(false)
-                setNewDonationForm({
-                  donorName: '',
-                  donorPhone: '',
-                  items: [{ name: '', quantity: '', unit: 'kg' }]
-                })
-              }}>
+          <Button onClick={() => {
+            if (!newDonationForm.donorName || !newDonationForm.donorPhone) {
+              toast.error('Vui lĂ²ng Ä‘iá»n Ä‘áº§y Ä‘á»§ thĂ´ng tin!')
+              return
+            }
+            if (newDonationForm.items.some(item => !item.name || !item.quantity)) {
+              toast.error('Vui lĂ²ng Ä‘iá»n Ä‘áº§y Ä‘á»§ thĂ´ng tin váº­t pháº©m!')
+              return
+            }
+            toast.success('ThĂªm lĂ´ hĂ ng thĂ nh cĂ´ng!')
+            setShowAddDialog(false)
+            setNewDonationForm({
+              donorName: '',
+              donorPhone: '',
+              items: [{ name: '', quantity: '', unit: 'kg' }]
+            })
+          }}>
             <Save className="w-4 h-4 mr-2" />
-            Lưu lô hàng
+            LÆ°u lĂ´ hĂ ng
           </Button>
         </DialogFooter>
       </Dialog>

@@ -9,6 +9,8 @@ import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
 import { useToast } from '../components/ui/toast'
 import { useScrollAnimation } from '../hooks/useScrollAnimation'
+import QRCodeDisplay from '../components/QRCodeDisplay'
+import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogContent, DialogFooter } from '../components/ui/dialog'
 
 function DonationForm() {
   const navigate = useNavigate()
@@ -17,6 +19,9 @@ function DonationForm() {
   useScrollAnimation()
 
   const selectedWarehouse = location.state?.warehouse || null
+
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+  const [generatedTrackingCode, setGeneratedTrackingCode] = useState(null)
 
   const [formData, setFormData] = useState({
     donorName: '',
@@ -100,17 +105,11 @@ function DonationForm() {
 
     console.log('Donation registered:', donation)
     
-    toast.success('Đăng ký quyên góp thành công! Mã tracking: ' + trackingCode, 5000)
+    // Hiển thị dialog với QR code
+    setGeneratedTrackingCode(trackingCode)
+    setShowSuccessDialog(true)
     
-    // Navigate to success page or back
-    setTimeout(() => {
-      navigate('/drms/donor', { 
-        state: { 
-          message: 'Đăng ký thành công! Vui lòng mang hàng đến điểm tập kết.',
-          trackingCode 
-        } 
-      })
-    }, 2000)
+    toast.success('Đăng ký quyên góp thành công! Mã tracking: ' + trackingCode, 5000)
   }
 
   return (
@@ -423,6 +422,78 @@ function DonationForm() {
           </form>
         </div>
       </div>
+
+      {/* Success Dialog with QR Code */}
+      <Dialog open={showSuccessDialog} onClose={() => {
+        setShowSuccessDialog(false)
+        navigate('/drms/donor', { 
+          state: { 
+            message: 'Đăng ký thành công! Vui lòng mang hàng đến điểm tập kết.',
+            trackingCode: generatedTrackingCode
+          } 
+        })
+      }}>
+        <DialogHeader>
+          <DialogTitle className="text-green-600">Đăng ký thành công!</DialogTitle>
+          <DialogDescription>
+            Mã tracking của bạn: <strong className="font-mono">{generatedTrackingCode}</strong>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogContent>
+          <div className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-sm text-green-800 mb-2">
+                ✅ Đăng ký quyên góp của bạn đã được ghi nhận thành công!
+              </p>
+              <p className="text-sm text-green-700">
+                Vui lòng mang hàng đến điểm tập kết và xuất trình mã QR này để nhập kho.
+              </p>
+            </div>
+
+            {/* QR Code Display */}
+            <div className="flex flex-col items-center py-4">
+              <label className="text-sm font-semibold text-gray-600 mb-3">Mã QR Tracking</label>
+              {generatedTrackingCode && (
+                <QRCodeDisplay 
+                  trackingId={generatedTrackingCode} 
+                  size={250}
+                  showDownload={true}
+                />
+              )}
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-xs text-blue-800">
+                <strong>Lưu ý:</strong> Lưu lại mã QR này hoặc ghi nhớ mã tracking để xuất trình khi đến điểm tập kết.
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowSuccessDialog(false)
+              navigate('/drms/donor')
+            }}
+          >
+            Đóng
+          </Button>
+          <Button
+            onClick={() => {
+              setShowSuccessDialog(false)
+              navigate('/drms/donor', { 
+                state: { 
+                  message: 'Đăng ký thành công! Vui lòng mang hàng đến điểm tập kết.',
+                  trackingCode: generatedTrackingCode
+                } 
+              })
+            }}
+          >
+            Về trang chủ
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   )
 }
